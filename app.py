@@ -2,6 +2,7 @@ import streamlit as st
 import feedparser
 import pandas as pd
 import os
+import urllib.parse
 from datetime import datetime, timedelta
 
 KEYWORD_FILE = "keywords.txt"
@@ -43,14 +44,16 @@ search_keywords = [k.strip() for k in user_input.split(",") if k.strip()]
 def get_news():
     all_news = []
     for kw in search_keywords:
-        # 국내 전체 및 국제 전체 포괄 통합망 구축
+        # [수정 핵심] 띄어쓰기 및 특수문자를 URL용으로 안전하게 인코딩 (예: 'supply chain' -> 'supply%20chain')
+        safe_kw = urllib.parse.quote(kw)
+        
         feeds = {
-            "국내뉴스": f"https://news.google.com/rss/search?q={kw}&hl=ko&gl=KR&ceid=KR:ko",
-            "국제뉴스": f"https://news.google.com/rss/search?q={kw}&hl=en&gl=US&ceid=US:en"
+            "국내뉴스": f"https://news.google.com/rss/search?q={safe_kw}&hl=ko&gl=KR&ceid=KR:ko",
+            "국제뉴스": f"https://news.google.com/rss/search?q={safe_kw}&hl=en&gl=US&ceid=US:en"
         }
         for media_type, url in feeds.items():
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]: # 수집량 확보를 위해 15개씩 긁어옵니다
+            for entry in feed.entries[:15]: 
                 published = entry.get('published_parsed', None)
                 # 무조건 한국 시간(KST)으로 강제 변환
                 dt = datetime(*published[:6]) + timedelta(hours=9) if published else datetime.now()
@@ -77,7 +80,5 @@ if search_keywords:
         
         for _, row in df.iterrows():
             time_str = row['시간'].strftime('%m-%d %H:%M')
-            # [분류 - 원본매체명] 시간 형태로 출력
             st.markdown(f"<div class='time-font'>[{row['분류']} - {row['매체']}] {time_str}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='title-font'><a href='{row['링크']}' target='_blank' style='text-decoration:none; color:#1f77b4;'>{row['제목']}</a></div>", unsafe_allow_html=True)
-            st.divider()
+            st.markdown(f"<div class='title-font'><a href='{row['링크']}' target='_blank' style='text-decoration:none; color:#1f77b4;'>{row['제목']}</a></div>", unsafe_allow_html
