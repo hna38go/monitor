@@ -47,10 +47,13 @@ def get_news():
         # 띄어쓰기 및 특수문자를 URL용으로 안전하게 인코딩
         safe_kw = urllib.parse.quote(kw)
         
+        # [핵심] 인베스팅닷컴 전용 강제 검색망 추가
         feeds = {
+            "인베스팅": f"https://news.google.com/rss/search?q=site:investing.com+{safe_kw}&hl=ko&gl=KR",
             "국내뉴스": f"https://news.google.com/rss/search?q={safe_kw}&hl=ko&gl=KR&ceid=KR:ko",
             "국제뉴스": f"https://news.google.com/rss/search?q={safe_kw}&hl=en&gl=US&ceid=US:en"
         }
+        
         for media_type, url in feeds.items():
             feed = feedparser.parse(url)
             for entry in feed.entries[:15]: 
