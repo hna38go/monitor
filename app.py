@@ -1,92 +1,83 @@
 import streamlit as st
 import feedparser
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import quote
-from datetime import datetime, timedelta, timezone
-import time
+import pandas as pd
+import os
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Multi-Keyword Monitor", layout="wide")
+KEYWORD_FILE = "keywords.txt"
 
-if 'keywords' not in st.session_state:
-    st.session_state.keywords = ["Supply Chain"]
+def load_keywords():
+    if os.path.exists(KEYWORD_FILE):
+        with open(KEYWORD_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return "공급망, supply chain"
 
-current_keys = ", ".join(st.session_state.keywords)
-st.title(f"🌐 실시간 통합 관제: {current_keys}")
+def save_keywords(keywords):
+    with open(KEYWORD_FILE, "w", encoding="utf-8") as f:
+        f.write(keywords)
 
-def to_kst(struct_time):
-    # RSS에서 제공하는 UTC 시간을 한국 시간(UTC+9)으로 정확히 변환
-    if struct_time:
-        dt_utc = datetime(*struct_time[:6], tzinfo=timezone.utc)
-        return dt_utc.astimezone(timezone(timedelta(hours=9)))
-    return datetime.now(timezone(timedelta(hours=9)))
+st.set_page_config(page_title="실시간 뉴스 관제", layout="wide")
 
-def fetch_reddit(keyword):
-    url = f"https://www.reddit.com/search.rss?q={quote(keyword)}&sort=new&t=hour"
-    feed = feedparser.parse(url)
-    items = []
-    for e in feed.entries:
-        real_url = e.id if 'http' in e.id else e.link
-        if "/comments/" not in real_url: real_url = e.link.split('?')[0]
-        dt = to_kst(e.updated_parsed) if 'updated_parsed' in e else datetime.now(timezone(timedelta(hours=9)))
-        items.append({"Src": f"Reddit({keyword})", "Tit": e.title, "Url": real_url, "Time": dt})
-    return items
+# 모바일 최적화 고밀도 CSS (여백 최소화, 글씨 축소)
+st.markdown("""
+    <style>
+    .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
+    .time-font { font-size: 11px !important; color: #888888; margin-bottom: 2px !important; }
+    .title-font { font-size: 14px !important; font-weight: 600 !important; line-height: 1.3 !important; }
+    .stDivider { margin-top: 8px !important; margin-bottom: 8px !important; }
+    </style>
+""", unsafe_allow_html=True)
 
-def fetch_google_reuters(keyword):
-    url = f"https://news.google.com/rss/search?q={quote(keyword)}+source:Reuters+when:1h&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(url)
-    return [{"Src": f"Reuters({keyword})", "Tit": e.title, "Url": e.link, "Time": to_kst(e.published_parsed)} for e in feed.entries[:5]]
+if 'current_ks' not in st.session_state:
+    st.session_state['current_ks'] = load_keywords()
 
-def fetch_google_global(keyword):
-    url = f"https://news.google.com/rss/search?q={quote(keyword)}+when:1h&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(url)
-    return [{"Src": f"Global({keyword})", "Tit": e.title, "Url": e.link, "Time": to_kst(e.published_parsed)} for e in feed.entries[:5]]
+st.sidebar.title("설정")
+user_input = st.sidebar.text_input("키워드 (쉼표 구분)", st.session_state['current_ks'])
 
-def fetch_naver(keyword):
-    url = f"https://news.google.com/rss/search?q={quote(keyword)}&hl=ko&gl=KR&ceid=KR:ko"
-    feed = feedparser.parse(url)
-    return [{"Src": f"Naver({keyword})", "Tit": e.title, "Url": e.link, "Time": to_kst(e.published_parsed)} for e in feed.entries[:10]]
+if user_input != st.session_state['current_ks']:
+    save_keywords(user_input)
+    st.session_state['current_ks'] = user_input
 
-def fetch_investing(keyword):
-    url = f"https://www.investing.com/search/?q={quote(keyword)}&tab=news"
-    items = []
-    try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        for art in soup.select('.articleItem')[:3]:
-            t = art.select_one('.title')
-            l = art.select_one('a.title')
-            if t and l:
-                # 인베스팅은 현재 한국 시간으로 처리
-                items.append({"Src": f"Investing({keyword})", "Tit": t.get_text(strip=True), "Url": "https://www.investing.com" + l['href'], "Time": datetime.now(timezone(timedelta(hours=9)))})
-    except: pass
-    return items
+search_keywords = [k.strip() for k in user_input.split(",") if k.strip()]
 
-with st.sidebar:
-    with st.form(key='keyword_form', clear_on_submit=True):
-        new_key = st.text_input("새 키워드 추가")
-        submit = st.form_submit_button("추가")
-    if submit and new_key and new_key not in st.session_state.keywords:
-        st.session_state.keywords.append(new_key)
-        st.rerun()
-    st.write("---")
-    for k in st.session_state.keywords: st.info(f"📍 {k}")
-    if st.button("목록 초기화"):
-        st.session_state.keywords = ["Supply Chain"]
-        st.rerun()
+def get_news():
+    all_news = []
+    for kw in search_keywords:
+        # 국내 전체 및 국제 전체 포괄 통합망 구축
+        feeds = {
+            "국내뉴스": f"https://news.google.com/rss/search?q={kw}&hl=ko&gl=KR&ceid=KR:ko",
+            "국제뉴스": f"https://news.google.com/rss/search?q={kw}&hl=en&gl=US&ceid=US:en"
+        }
+        for media_type, url in feeds.items():
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:15]: # 수집량 확보를 위해 15개씩 긁어옵니다
+                published = entry.get('published_parsed', None)
+                # 무조건 한국 시간(KST)으로 강제 변환
+                dt = datetime(*published[:6]) + timedelta(hours=9) if published else datetime.now()
+                
+                # 구글 RSS에서 원본 매체 이름 추출
+                source_name = entry.get('source', {}).get('title', media_type)
+                
+                all_news.append({
+                    "분류": media_type,
+                    "매체": source_name,
+                    "제목": entry.title,
+                    "시간": dt, 
+                    "링크": entry.link
+                })
+    return all_news
 
-all_data = []
-for k in st.session_state.keywords:
-    all_data += fetch_reddit(k) + fetch_google_reuters(k) + fetch_google_global(k) + fetch_naver(k) + fetch_investing(k)
+st.markdown("### 🚀 실시간 관제 센터")
 
-# 시간순(최신순) 정렬
-all_data.sort(key=lambda x: x['Time'], reverse=True)
-
-for item in all_data:
-    col1, col2 = st.columns([2.5, 7.5])
-    with col1:
-        st.caption(f"{item['Src']}")
-        st.caption(f"🕒 {item['Time'].strftime('%m-%d %H:%M:%S')}")
-    with col2:
-        st.markdown(f"### [{item['Tit']}]({item['Url']})")
-    st.divider()
+if search_keywords:
+    news_data = get_news()
+    if news_data:
+        # 수집된 모든 뉴스를 완벽한 최신 시간순으로 통합 정렬
+        df = pd.DataFrame(news_data).sort_values(by="시간", ascending=False).drop_duplicates(subset=['제목']).reset_index(drop=True)
+        
+        for _, row in df.iterrows():
+            time_str = row['시간'].strftime('%m-%d %H:%M')
+            # [분류 - 원본매체명] 시간 형태로 출력
+            st.markdown(f"<div class='time-font'>[{row['분류']} - {row['매체']}] {time_str}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='title-font'><a href='{row['링크']}' target='_blank' style='text-decoration:none; color:#1f77b4;'>{row['제목']}</a></div>", unsafe_allow_html=True)
+            st.divider()
