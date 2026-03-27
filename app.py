@@ -21,7 +21,7 @@ def save_keywords(keywords):
 
 st.set_page_config(page_title="실시간 뉴스 관제", layout="wide")
 
-# 모바일 고밀도 UI 유지
+# 모바일 고밀도 UI
 st.markdown("""
     <style>
     .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
@@ -37,7 +37,6 @@ if 'keywords' not in st.session_state:
 
 st.sidebar.title("설정")
 
-# 키워드 개별 추가 폼
 with st.sidebar.form(key='kw_form', clear_on_submit=True):
     new_kw = st.text_input("새 키워드 추가")
     submit_btn = st.form_submit_button("추가")
@@ -50,7 +49,6 @@ with st.sidebar.form(key='kw_form', clear_on_submit=True):
 
 st.sidebar.markdown("### 📌 등록된 키워드")
 
-# 키워드 배너 및 삭제 버튼
 for kw in list(st.session_state['keywords']):
     col1, col2 = st.sidebar.columns([4, 1])
     with col1:
@@ -66,22 +64,20 @@ def get_news():
     for kw in st.session_state['keywords']:
         safe_kw = urllib.parse.quote(kw)
         
-        # [수정] 모든 국가별 파이프라인 유지
+        # [핵심 수정] hl=en 설정을 통해 일본/중화권 소식도 영어로 된 기사만 수집
         feeds = {
             "인베스팅(KR)": f"https://news.google.com/rss/search?q={safe_kw}+site:kr.investing.com&hl=ko&gl=KR",
             "인베스팅(US)": f"https://news.google.com/rss/search?q={safe_kw}+site:investing.com&hl=en&gl=US",
             "국내뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=ko&gl=KR",
             "국제뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=en&gl=US",
-            "일본뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=ja&gl=JP",
-            "중화권뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=zh-TW&gl=TW"
+            "일본(영문)": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=en-JP&gl=JP",
+            "중화권(영문)": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=en-HK&gl=HK"
         }
         
         for media_type, url in feeds.items():
             feed = feedparser.parse(url)
             for entry in feed.entries: 
                 source_name = entry.get('source', {}).get('title', media_type)
-                
-                # [수정 핵심] MAJOR_MEDIA 필터링 로직을 완전히 제거함 (모든 출처 허용)
                 published = entry.get('published_parsed', None)
                 dt = datetime(*published[:6]) + timedelta(hours=9) if published else datetime.now()
                 clean_title = entry.title.rsplit(" - ", 1)[0]
@@ -98,11 +94,10 @@ def get_news():
 st.markdown("### 🚀 실시간 관제 센터")
 
 if st.session_state['keywords']:
-    with st.spinner('전 세계 실시간 뉴스 수집 중...'):
+    with st.spinner('전 세계 영문/국내 뉴스 수집 중...'):
         news_data = get_news()
         
     if news_data:
-        # 시간순 정렬 및 중복 제거
         df = pd.DataFrame(news_data).sort_values(by="시간", ascending=False).drop_duplicates(subset=['제목']).reset_index(drop=True)
         
         st.caption(f"**총 {len(df)}개**의 최신 기사가 수집되었습니다.")
