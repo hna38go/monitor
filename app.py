@@ -21,6 +21,7 @@ def save_keywords(keywords):
 
 st.set_page_config(page_title="실시간 뉴스 관제", layout="wide")
 
+# 모바일 고밀도 UI 유지
 st.markdown("""
     <style>
     .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
@@ -36,8 +37,9 @@ if 'keywords' not in st.session_state:
 
 st.sidebar.title("설정")
 
+# 키워드 개별 추가 폼
 with st.sidebar.form(key='kw_form', clear_on_submit=True):
-    new_kw = st.text_input("새 키워드 (하나씩 입력)")
+    new_kw = st.text_input("새 키워드 추가")
     submit_btn = st.form_submit_button("추가")
     if submit_btn and new_kw.strip():
         kw = new_kw.strip()
@@ -48,6 +50,7 @@ with st.sidebar.form(key='kw_form', clear_on_submit=True):
 
 st.sidebar.markdown("### 📌 등록된 키워드")
 
+# 키워드 배너 및 삭제 버튼
 for kw in list(st.session_state['keywords']):
     col1, col2 = st.sidebar.columns([4, 1])
     with col1:
@@ -58,26 +61,58 @@ for kw in list(st.session_state['keywords']):
             save_keywords(st.session_state['keywords'])
             st.rerun()
 
-# [핵심 1] 중국, 대만, 홍콩, 일본 메이저 언론사 대거 추가
-MAJOR_MEDIA = [
-    # 국내 종합/경제지/통신사/IT전문지
-    "매일경제", "한국경제", "조선", "중앙", "동아", "한겨레", "경향", "한국일보", "서울신문", "세계일보", "국민일보", "문화일보",
-    "파이낸셜", "서울경제", "헤럴드", "머니투데이", "아시아경제", "이데일리", "비즈워치", "조세일보",
-    "연합", "뉴시스", "뉴스1",
-    "전자신문", "블로터", "지디넷", "디지털데일리", "아이뉴스24",
-    
-    # 영미권 경제/테크/금융/종합 
-    "reuters", "bloomberg", "wall street journal", "wsj", "cnbc", "financial times", "forbes", "investing",
-    "fortune", "the economist", "barron", "marketwatch", "yahoo finance", "business insider", "morningstar",
-    "seeking alpha", "motley fool", "techcrunch", "the verge", "wired", "venturebeat", "engadget", 
-    "new york times", "washington post", "the guardian", "telegraph", "ap", "afp",
-    
-    # 아시아권(중/일/대만/홍콩) 추가
-    "nikkei", "yomiuri", "asahi", "mainichi", "nhk", "jiji", "toyokeizai", "diamond", "kyodo",
-    "south china morning post", "scmp", "xinhua", "global times", "cgtn", "caixin", "yicai", "sina", "tencent", "udn", "chinatimes", "liberty times"
-]
-
 def get_news():
     all_news = []
     for kw in st.session_state['keywords']:
         safe_kw = urllib.parse.quote(kw)
+        
+        # [수정] 모든 국가별 파이프라인 유지
+        feeds = {
+            "인베스팅(KR)": f"https://news.google.com/rss/search?q={safe_kw}+site:kr.investing.com&hl=ko&gl=KR",
+            "인베스팅(US)": f"https://news.google.com/rss/search?q={safe_kw}+site:investing.com&hl=en&gl=US",
+            "국내뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=ko&gl=KR",
+            "국제뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=en&gl=US",
+            "일본뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=ja&gl=JP",
+            "중화권뉴스": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=zh-TW&gl=TW"
+        }
+        
+        for media_type, url in feeds.items():
+            feed = feedparser.parse(url)
+            for entry in feed.entries: 
+                source_name = entry.get('source', {}).get('title', media_type)
+                
+                # [수정 핵심] MAJOR_MEDIA 필터링 로직을 완전히 제거함 (모든 출처 허용)
+                published = entry.get('published_parsed', None)
+                dt = datetime(*published[:6]) + timedelta(hours=9) if published else datetime.now()
+                clean_title = entry.title.rsplit(" - ", 1)[0]
+                
+                all_news.append({
+                    "분류": media_type,
+                    "매체": source_name,
+                    "제목": clean_title,
+                    "시간": dt, 
+                    "링크": entry.link
+                })
+    return all_news
+
+st.markdown("### 🚀 실시간 관제 센터")
+
+if st.session_state['keywords']:
+    with st.spinner('전 세계 실시간 뉴스 수집 중...'):
+        news_data = get_news()
+        
+    if news_data:
+        # 시간순 정렬 및 중복 제거
+        df = pd.DataFrame(news_data).sort_values(by="시간", ascending=False).drop_duplicates(subset=['제목']).reset_index(drop=True)
+        
+        st.caption(f"**총 {len(df)}개**의 최신 기사가 수집되었습니다.")
+        
+        for _, row in df.iterrows():
+            time_str = row['시간'].strftime('%m-%d %H:%M')
+            st.markdown(f"<div class='time-font'>[{row['분류']} - {row['매체']}] {time_str}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='title-font'><a href='{row['링크']}' target='_blank' style='text-decoration:none; color:#1f77b4;'>{row['제목']}</a></div>", unsafe_allow_html=True)
+            st.divider()
+    else:
+        st.warning("현재 키워드에 해당하는 최신 뉴스가 없습니다.")
+else:
+    st.info("사이드바에서 관제할 키워드를 추가해 주십시오.")
