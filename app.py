@@ -44,7 +44,7 @@ search_keywords = [k.strip() for k in user_input.split(",") if k.strip()]
 def get_news():
     all_news = []
     for kw in search_keywords:
-        # [수정 핵심] 띄어쓰기 및 특수문자를 URL용으로 안전하게 인코딩 (예: 'supply chain' -> 'supply%20chain')
+        # 띄어쓰기 및 특수문자를 URL용으로 안전하게 인코딩
         safe_kw = urllib.parse.quote(kw)
         
         feeds = {
@@ -81,4 +81,5 @@ if search_keywords:
         for _, row in df.iterrows():
             time_str = row['시간'].strftime('%m-%d %H:%M')
             st.markdown(f"<div class='time-font'>[{row['분류']} - {row['매체']}] {time_str}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='title-font'><a href='{row['링크']}' target='_blank' style='text-decoration:none; color:#1f77b4;'>{row['제목']}</a></div>", unsafe_allow_html
+            st.markdown(f"<div class='title-font'><a href='{row['링크']}' target='_blank' style='text-decoration:none; color:#1f77b4;'>{row['제목']}</a></div>", unsafe_allow_html=True)
+            st.divider()
