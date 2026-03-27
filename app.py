@@ -19,7 +19,6 @@ def save_keywords(keywords):
 
 st.set_page_config(page_title="실시간 뉴스 관제", layout="wide")
 
-# 모바일 최적화 고밀도 CSS (여백 최소화, 글씨 축소)
 st.markdown("""
     <style>
     .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
@@ -44,30 +43,33 @@ search_keywords = [k.strip() for k in user_input.split(",") if k.strip()]
 def get_news():
     all_news = []
     for kw in search_keywords:
-        # 띄어쓰기 및 특수문자를 URL용으로 안전하게 인코딩
         safe_kw = urllib.parse.quote(kw)
         
-        # [핵심] 인베스팅닷컴 전용 강제 검색망 추가
+        # [핵심 1] 인베스팅 한국(KR)과 영문(US) 사이트 철저히 분리
+        # [핵심 2] 통합망에 when:1d 파라미터를 추가하여 무조건 '최근 24시간' 기사만 강제 타겟팅
         feeds = {
-            "인베스팅": f"https://news.google.com/rss/search?q=site:investing.com+{safe_kw}&hl=ko&gl=KR",
-            "국내뉴스": f"https://news.google.com/rss/search?q={safe_kw}&hl=ko&gl=KR&ceid=KR:ko",
-            "국제뉴스": f"https://news.google.com/rss/search?q={safe_kw}&hl=en&gl=US&ceid=US:en"
+            "인베스팅(KR)": f"https://news.google.com/rss/search?q={safe_kw}+site:kr.investing.com&hl=ko&gl=KR",
+            "인베스팅(US)": f"https://news.google.com/rss/search?q={safe_kw}+site:investing.com&hl=en&gl=US",
+            "국내통합": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=ko&gl=KR",
+            "국제통합": f"https://news.google.com/rss/search?q={safe_kw}+when:1d&hl=en&gl=US"
         }
         
         for media_type, url in feeds.items():
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]: 
+            # [핵심 3] [15:] 제한 삭제. 구글이 던지는 100여 개 기사를 남김없이 전부 쓸어 담음
+            for entry in feed.entries: 
                 published = entry.get('published_parsed', None)
-                # 무조건 한국 시간(KST)으로 강제 변환
                 dt = datetime(*published[:6]) + timedelta(hours=9) if published else datetime.now()
                 
-                # 구글 RSS에서 원본 매체 이름 추출
                 source_name = entry.get('source', {}).get('title', media_type)
+                
+                # 구글 뉴스 특유의 " - 매체명" 꼬리표가 제목에 붙는 것을 깔끔하게 제거
+                clean_title = entry.title.rsplit(" - ", 1)[0]
                 
                 all_news.append({
                     "분류": media_type,
                     "매체": source_name,
-                    "제목": entry.title,
+                    "제목": clean_title,
                     "시간": dt, 
                     "링크": entry.link
                 })
@@ -76,10 +78,14 @@ def get_news():
 st.markdown("### 🚀 실시간 관제 센터")
 
 if search_keywords:
-    news_data = get_news()
+    with st.spinner('실시간 기사 대량 수집 중...'):
+        news_data = get_news()
+        
     if news_data:
-        # 수집된 모든 뉴스를 완벽한 최신 시간순으로 통합 정렬
+        # 수집된 수백 개의 뉴스를 시간순으로 정렬
         df = pd.DataFrame(news_data).sort_values(by="시간", ascending=False).drop_duplicates(subset=['제목']).reset_index(drop=True)
+        
+        st.caption(f"**총 {len(df)}개**의 기사가 수집되었습니다.")
         
         for _, row in df.iterrows():
             time_str = row['시간'].strftime('%m-%d %H:%M')
