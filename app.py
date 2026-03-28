@@ -21,14 +21,14 @@ def save_keywords(keywords):
 
 st.set_page_config(page_title="실시간 뉴스 관제", layout="wide")
 
-# 모바일 고밀도 UI
+# 모바일 고밀도 UI (사이드바 버튼 크기 및 여백 최소화 반영)
 st.markdown("""
     <style>
     .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
     .time-font { font-size: 11px !important; color: #888888; margin-bottom: 2px !important; }
     .title-font { font-size: 14px !important; font-weight: 600 !important; line-height: 1.3 !important; }
     .stDivider { margin-top: 8px !important; margin-bottom: 8px !important; }
-    .kw-banner { border: 1px solid #d3d4d6; border-radius: 0.3rem; padding: 0.4rem 0.5rem; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.1rem; display: flex; align-items: center; justify-content: center; background-color: transparent;}
+    div[data-testid="stSidebar"] button { padding: 0px 5px !important; min-height: 0px !important; line-height: 1.5 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -49,10 +49,11 @@ with st.sidebar.form(key='kw_form', clear_on_submit=True):
 
 st.sidebar.markdown("### 📌 등록된 키워드")
 
+# 키워드 배너 제거 및 텍스트 바로 옆에 X 버튼 위치하도록 수정
 for kw in list(st.session_state['keywords']):
     col1, col2 = st.sidebar.columns([4, 1])
     with col1:
-        st.markdown(f"<div class='kw-banner'>{kw}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='margin-top: 4px; font-weight: bold;'>{kw}</div>", unsafe_allow_html=True)
     with col2:
         if st.button("❌", key=f"del_{kw}"):
             st.session_state['keywords'].remove(kw)
@@ -64,7 +65,6 @@ def get_news():
     for kw in st.session_state['keywords']:
         safe_kw = urllib.parse.quote(kw)
         
-        # [핵심 수정] hl=en 설정을 통해 일본/중화권 소식도 영어로 된 기사만 수집
         feeds = {
             "인베스팅(KR)": f"https://news.google.com/rss/search?q={safe_kw}+site:kr.investing.com&hl=ko&gl=KR",
             "인베스팅(US)": f"https://news.google.com/rss/search?q={safe_kw}+site:investing.com&hl=en&gl=US",
@@ -93,6 +93,7 @@ def get_news():
 
 st.markdown("### 🚀 실시간 관제 센터")
 
+# 원본 로직 유지: 별도 버튼 없이 접속 시 또는 키워드 변경 시에만 1회 자동 수집
 if st.session_state['keywords']:
     with st.spinner('전 세계 영문/국내 뉴스 수집 중...'):
         news_data = get_news()
